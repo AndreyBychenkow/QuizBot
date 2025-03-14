@@ -1,5 +1,6 @@
 import os
 import json
+import ssl
 
 import random
 import logging
@@ -21,8 +22,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-QUESTIONS_DIR = "quiz-questions"
-REDIS_PREFIX = "user:"
+questions_dir = "quiz-questions"
+
+context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+context.minimum_version = ssl.TLSVersion.TLSv1_2  # Требуемая версия TLS
+context.check_hostname = False
+context.verify_mode = ssl.CERT_NONE
 
 try:
     redis_client = redis.Redis(
@@ -30,8 +35,11 @@ try:
         port=env.int("REDIS_PORT"),
         password=env.str("REDIS_PASSWORD"),
         ssl=False,
+        ssl_cert_reqs=ssl.CERT_NONE,
         decode_responses=True,
+        socket_timeout=10
     )
+
     vk_session = vk_api.VkApi(token=env.str("VK_TOKEN"))
     longpoll = VkLongPoll(vk_session)
     vk = vk_session.get_api()
@@ -41,9 +49,9 @@ except Exception as e:
     raise
 try:
     quiz_dict = {}
-    for filename in os.listdir(QUESTIONS_DIR):
+    for filename in os.listdir(questions_dir):
         if filename.endswith(".txt"):
-            file_path = os.path.join(QUESTIONS_DIR, filename)
+            file_path = os.path.join(questions_dir, filename)
             with open(file_path, "r", encoding="KOI8-R") as f:
                 content = f.read()
                 blocks = content.strip().split("\n\n")
@@ -73,7 +81,7 @@ def create_keyboard():
 
 def get_user_state(user_id):
     try:
-        state = redis_client.get(f"{REDIS_PREFIX}{user_id}")
+        state = redis_client.get(f"user:vk-{user_id}")
         return json.loads(state) if state else {"current_question": None, "score": 0}
     except redis.RedisError as e:
         logger.error(f"Redis error: {e}")
@@ -82,7 +90,7 @@ def get_user_state(user_id):
 
 def save_user_state(user_id, state):
     try:
-        redis_client.set(f"{REDIS_PREFIX}{user_id}", json.dumps(state))
+        redis_client.set(f"user:vk-{user_id}", json.dumps(state))
     except redis.RedisError as e:
         logger.error(f"Redis error: {e}")
         raise

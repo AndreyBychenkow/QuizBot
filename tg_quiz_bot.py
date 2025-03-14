@@ -1,7 +1,9 @@
 import os
 import json
 
+import ssl
 import random
+
 import telebot
 import redis
 
@@ -11,12 +13,19 @@ from environs import Env
 env = Env()
 env.read_env()
 
+context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+context.minimum_version = ssl.TLSVersion.TLSv1_2
+context.check_hostname = False
+context.verify_mode = ssl.CERT_NONE
+
 redis_client = redis.Redis(
     host=env.str("REDIS_HOST"),
     port=env.int("REDIS_PORT"),
     password=env.str("REDIS_PASSWORD"),
     ssl=False,
+    ssl_cert_reqs=ssl.CERT_NONE,
     decode_responses=True,
+    socket_timeout=10
 )
 
 bot = telebot.TeleBot(env.str("TG_TOKEN"))
@@ -46,12 +55,12 @@ for filename in os.listdir(questions_dir):
 
 
 def get_user_state(chat_id):
-    state = redis_client.get(f"user:{chat_id}")
+    state = redis_client.get(f"user:tg-{chat_id}")
     return json.loads(state) if state else {"current_question": None, "score": 0}
 
 
 def save_user_state(chat_id, state):
-    redis_client.set(f"user:{chat_id}", json.dumps(state))
+    redis_client.set(f"user:tg-{chat_id}", json.dumps(state))
 
 
 def create_keyboard():
