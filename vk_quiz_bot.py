@@ -1,13 +1,13 @@
 import os
 import json
+
 import ssl
-
 import random
+
 import logging
-
 import redis
-import vk_api
 
+import vk_api
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 from vk_api.longpoll import VkEventType, VkLongPoll
 
@@ -17,38 +17,36 @@ from environs import Env
 env = Env()
 env.read_env()
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 questions_dir = "quiz-questions"
 
 context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-context.minimum_version = ssl.TLSVersion.TLSv1_2  # Требуемая версия TLS
+context.minimum_version = ssl.TLSVersion.TLSv1_2
 context.check_hostname = False
 context.verify_mode = ssl.CERT_NONE
 
-try:
-    redis_client = redis.Redis(
-        host=env.str("REDIS_HOST"),
-        port=env.int("REDIS_PORT"),
-        password=env.str("REDIS_PASSWORD"),
-        ssl=False,
-        ssl_cert_reqs=ssl.CERT_NONE,
-        decode_responses=True,
-        socket_timeout=10
-    )
+redis_client = redis.Redis(
+    host=env.str("REDIS_HOST"),
+    port=env.int("REDIS_PORT"),
+    password=env.str("REDIS_PASSWORD"),
+    ssl=False,
+    ssl_cert_reqs=ssl.CERT_NONE,
+    decode_responses=True,
+    socket_timeout=10
+)
 
-    vk_session = vk_api.VkApi(token=env.str("VK_TOKEN"))
-    longpoll = VkLongPoll(vk_session)
-    vk = vk_session.get_api()
-    admin_id = env.int("ADMIN_ID")
-except Exception as e:
-    logger.error(f"Ошибка инициализации: {e}")
-    raise
-try:
-    quiz_dict = {}
+vk_session = vk_api.VkApi(token=env.str("VK_TOKEN"))
+longpoll = VkLongPoll(vk_session)
+vk = vk_session.get_api()
+admin_id = env.int("ADMIN_ID")
+
+
+def load_questions():
+    """Загрузка вопросов из файлов."""
+    questions = {}
     for filename in os.listdir(questions_dir):
         if filename.endswith(".txt"):
             file_path = os.path.join(questions_dir, filename)
@@ -58,16 +56,15 @@ try:
                 for i in range(len(blocks)):
                     if blocks[i].startswith("Вопрос"):
                         question = " ".join(
-                            line.strip() for line in blocks[i].split("\n")[1:]
-                        )
+                            line.strip() for line in blocks[i].split("\n")[1:])
                         if i + 1 < len(blocks) and blocks[i + 1].startswith("Ответ"):
                             answer = " ".join(
-                                line.strip() for line in blocks[i + 1].split("\n")[1:]
-                            )
-                            quiz_dict[question] = answer
-except Exception as e:
-    logger.error(f"Ошибка загрузки вопросов: {e}")
-    raise
+                                line.strip() for line in blocks[i + 1].split("\n")[1:])
+                            questions[question] = answer
+    return questions
+
+
+quiz_dict = load_questions()
 
 
 def create_keyboard():
@@ -80,20 +77,12 @@ def create_keyboard():
 
 
 def get_user_state(user_id):
-    try:
-        state = redis_client.get(f"user:vk-{user_id}")
-        return json.loads(state) if state else {"current_question": None, "score": 0}
-    except redis.RedisError as e:
-        logger.error(f"Redis error: {e}")
-        raise
+    state = redis_client.get(f"user:vk-{user_id}")
+    return json.loads(state) if state else {"current_question": None, "score": 0}
 
 
 def save_user_state(user_id, state):
-    try:
-        redis_client.set(f"user:vk-{user_id}", json.dumps(state))
-    except redis.RedisError as e:
-        logger.error(f"Redis error: {e}")
-        raise
+    redis_client.set(f"user:vk-{user_id}", json.dumps(state))
 
 
 def send_message(user_id, message):
@@ -107,7 +96,6 @@ def send_message(user_id, message):
         logger.info(f"Sent message to {user_id}")
     except vk_api.exceptions.ApiError as e:
         logger.error(f"VK API Error: {e}")
-        raise
 
 
 def handle_new_question(user_id):
@@ -151,27 +139,23 @@ def handle_answer(user_id, text):
 
 
 def main():
-    try:
-        send_message(admin_id, "🟢 Бот успешно запущен!")
-        logger.info("Бот запущен")
+    send_message(admin_id, "🟢 Бот успешно запущен!")
+    logger.info("Бот запущен")
 
-        for event in longpoll.listen():
-            if event.type == VkEventType.MESSAGE_NEW and event.to_me:
-                user_id = event.user_id
-                text = event.text
-                logger.info(f"Получено сообщение от {user_id}: {text}")
+    for event in longpoll.listen():
+        if event.type == VkEventType.MESSAGE_NEW and event.to_me:
+            user_id = event.user_id
+            text = event.text
+            logger.info(f"Получено сообщение от {user_id}: {text}")
 
-                if text == "Новый вопрос":
-                    handle_new_question(user_id)
-                elif text == "Сдаться":
-                    handle_give_up(user_id)
-                elif text == "Мой счёт":
-                    handle_score(user_id)
-                else:
-                    handle_answer(user_id, text)
-    except Exception as e:
-        logger.error(f"Critical error: {e}")
-        raise
+            if text == "Новый вопрос":
+                handle_new_question(user_id)
+            elif text == "Сдаться":
+                handle_give_up(user_id)
+            elif text == "Мой счёт":
+                handle_score(user_id)
+            else:
+                handle_answer(user_id, text)
 
 
 if __name__ == "__main__":
