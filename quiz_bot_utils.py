@@ -58,11 +58,11 @@ def create_keyboard(platform):
         return keyboard.get_keyboard()
 
 
-def create_redis_client(env):
+def create_redis_client(host, port, password):
     return redis.Redis(
-        host=env.str("REDIS_HOST"),
-        port=env.int("REDIS_PORT"),
-        password=env.str("REDIS_PASSWORD"),
+        host=host,
+        port=port,
+        password=password,
         ssl=False,
         ssl_cert_reqs=ssl.CERT_NONE,
         decode_responses=True,

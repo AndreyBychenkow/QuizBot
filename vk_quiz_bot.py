@@ -25,7 +25,11 @@ logger = logging.getLogger(__name__)
 
 context = create_ssl_context()
 
-redis_client = create_redis_client(env)
+redis_client = create_redis_client(
+    host=env.str("REDIS_HOST"),
+    port=env.int("REDIS_PORT"),
+    password=env.str("REDIS_PASSWORD")
+)
 
 vk_session = vk_api.VkApi(token=env.str("VK_TOKEN"))
 longpoll = VkLongPoll(vk_session)

@@ -16,7 +16,11 @@ env.read_env()
 
 context = create_ssl_context()
 
-redis_client = create_redis_client(env)
+redis_client = create_redis_client(
+    host=env.str("REDIS_HOST"),
+    port=env.int("REDIS_PORT"),
+    password=env.str("REDIS_PASSWORD")
+)
 
 bot = telebot.TeleBot(env.str("TG_TOKEN"))
 questions_dir = "quiz-questions"
