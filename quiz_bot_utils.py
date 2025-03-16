@@ -1,7 +1,4 @@
 import os
-import json
-
-import redis
 import ssl
 
 
@@ -26,15 +23,6 @@ def load_questions(questions_dir):
     return questions
 
 
-def get_user_state(redis_client, user_id, platform):
-    state = redis_client.get(f"user:{platform}-{user_id}")
-    return json.loads(state) if state else {"current_question": None, "score": 0}
-
-
-def save_user_state(redis_client, user_id, state, platform):
-    redis_client.set(f"user:{platform}-{user_id}", json.dumps(state))
-
-
 def create_keyboard(platform):
     if platform == "tg":
         from telebot.types import ReplyKeyboardMarkup, KeyboardButton
@@ -56,18 +44,6 @@ def create_keyboard(platform):
         keyboard.add_line()
         keyboard.add_button("Мой счёт", color=VkKeyboardColor.SECONDARY)
         return keyboard.get_keyboard()
-
-
-def create_redis_client(host, port, password):
-    return redis.Redis(
-        host=host,
-        port=port,
-        password=password,
-        ssl=False,
-        ssl_cert_reqs=ssl.CERT_NONE,
-        decode_responses=True,
-        socket_timeout=10,
-    )
 
 
 def create_ssl_context():
